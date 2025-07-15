@@ -1,7 +1,5 @@
 // OpenRouter API wrapper
 
-const MODEL = process.env.NEXT_PUBLIC_OPENROUTER_MODEL || 'moonshotai/kimi-k2:free'
-
 interface OpenRouterResponse {
   choices: Array<{
     message: {
@@ -21,6 +19,7 @@ interface OpenRouterOptions {
 
 export async function generateWithOpenRouter(prompt: string, options?: OpenRouterOptions): Promise<string> {
   const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
+  const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2:free';
   
   if (!OPENROUTER_KEY) {
     throw new Error('OPENROUTER_KEY is not configured');
@@ -28,7 +27,7 @@ export async function generateWithOpenRouter(prompt: string, options?: OpenRoute
 
   // Build the request body
   const requestBody: any = {
-    model: options?.model || MODEL,
+    model: options?.model || DEFAULT_MODEL,
     messages: options?.messages || [{ role: 'user', content: prompt }],
   };
 
