@@ -18,6 +18,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "src/components/CreateEvent., "s, "src/components/FinalOutput"rc/c, "src/components/CreateEvent"omponents/SuggestSpeakers"tsx"],
   "exclude": ["node_modules"]
 }
