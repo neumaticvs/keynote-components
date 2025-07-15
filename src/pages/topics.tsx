@@ -1,11 +1,115 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import EventPanelTopics from '@/components/PanelTopics';
+import { PanelTopic } from '@/lib/parse';
 
 const TopicsPage = () => {
+  const router = useRouter();
+  const [panels, setPanels] = useState<PanelTopic[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (router.query.panels) {
+      try {
+        const parsedPanels = JSON.parse(router.query.panels as string);
+        setPanels(parsedPanels);
+      } catch (error) {
+        console.error('Failed to parse panels:', error);
+        alert('Invalid panel data. Redirecting to home...');
+        router.push('/');
+      }
+    }
+  }, [router.query.panels, router]);
+
+  const onTopicConfirm = (panelId: string) => {
+    setPanels(prevPanels => 
+      prevPanels.map(panel => 
+        panel.id === panelId 
+          ? { ...panel, isConfirmed: true }
+          : panel
+      )
+    );
+  };
+
+  const onTopicRegenerate = async (panelId: string) => {
+    setIsLoading(true);
+    setPanels(prevPanels =>
+      prevPanels.map(panel =>
+        panel.id === panelId
+          ? { ...panel, isRegenerating: true }
+          : panel
+      )
+    );
+
+    try {
+      const response = await fetch('/api/regenerate-topic', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ panelId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const { topic } = await response.json();
+
+      setPanels(prevPanels =>
+        prevPanels.map(panel =>
+          panel.id === panelId
+            ? {
+                ...panel,
+                suggestedTopic: topic.suggestedTopic,
+                justification: topic.justification,
+                isConfirmed: false,
+                isRegenerating: false,
+              }
+            : panel
+        )
+      );
+    } catch (error) {
+      console.error('Error regenerating topic:', error);
+      alert(error instanceof Error ? error.message : 'Failed to regenerate topic. Please try again.');
+      
+      setPanels(prevPanels =>
+        prevPanels.map(panel =>
+          panel.id === panelId
+            ? { ...panel, isRegenerating: false }
+            : panel
+        )
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onNextStep = () => {
+    const confirmedPanels = panels.filter(panel => panel.isConfirmed);
+    
+    if (confirmedPanels.length === 0) {
+      alert('Please confirm at least one topic before proceeding.');
+      return;
+    }
+
+    router.push({
+      pathname: '/speakers',
+      query: {
+        panels: JSON.stringify(confirmedPanels),
+        eventName: router.query.eventName,
+        mainTopic: router.query.mainTopic,
+      },
+    });
+  };
+
   return (
-    <div>
-      <h1>Event Panel Topics</h1>
-      <p>This page will display the EventPanelTopics component.</p>
-    </div>
+    <EventPanelTopics
+      panels={panels}
+      onTopicConfirm={onTopicConfirm}
+      onTopicRegenerate={onTopicRegenerate}
+      onNextStep={onNextStep}
+    />
   );
 };
 
