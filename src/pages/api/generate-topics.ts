@@ -1,7 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { searchGoogle } from '@/lib/serp';
+import { zodResponseFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 import { generateWithOpenRouter } from '@/lib/openrouter';
-import { parseTopics } from '@/lib/parse';
+
+const PanelSchema = z.object({
+  titulo: z.string(),
+  justificativa: z.string(),
+});
+const PanelsSchema = z.object({ paineis: z.array(PanelSchema) });
 
 export default async function handler(
   req: NextApiRequest,
@@ -14,48 +20,45 @@ export default async function handler(
   try {
     const { eventName, mainTopic, additionalInfo, numberOfPanels } = req.body;
 
-    // Search for relevant content
-    const searchQuery = `${mainTopic} ${additionalInfo}`;
-    const searchResults = await searchGoogle(searchQuery);
-    
-    // Extract top 5 article titles
-    const topArticles = searchResults.map(result => result.title);
+    const prompt = `
+Você é um especialista em criação de agendas relevantes e atuais para conferências de liderança empresarial no Brasil.
+Data de hoje: ${new Date().toLocaleDateString('pt-BR')}
+Tema macro: ${mainTopic}
 
-    // Build the prompt
-    const prompt = `You are an expert event planner. Create ${numberOfPanels} engaging panel topics for an event called "${eventName}".
+Crie ${numberOfPanels} tópicos de painéis relevantes para executivos C-level no Brasil, considerando as tendências mais atuais até hoje.
+Cada painel deve:
+- Ser altamente relevante para líderes empresariais brasileiros
+- Abordar tendências atuais e futuras
+- Ter título atrativo e profissional
+- Incluir justificativa de por que é importante hoje
+`;
 
-Main topic: ${mainTopic}
-Additional context: ${additionalInfo}
-
-Here are some relevant article titles for inspiration:
-${topArticles.map((title: string, i: number) => `${i + 1}. ${title}`).join('\n')}
-
-Generate ${numberOfPanels} panel topics that are:
-- Diverse and complementary
-- Engaging for the audience
-- Actionable and insightful
-- Well-structured with clear focus
-
-For each panel, provide:
-- Title
-- Description (2-3 sentences)
-- Duration (in minutes)
-- Type (keynote, panel, workshop, or breakout)
-
-Format your response as a numbered list with clear structure.`;
-
-    // Generate topics using OpenRouter
-    const rawText = await generateWithOpenRouter(prompt);
+    // Generate topics using OpenRouter with structured output
+    const rawText = await generateWithOpenRouter(prompt, {
+      model: 'moonshotai/kimi-k2:free',
+      messages: [
+        { role: 'system', content: `Hoje é ${new Date().toLocaleDateString('pt-BR')}. Use informações atualizadas.` },
+        { role: 'user', content: prompt },
+      ],
+      response_format: zodResponseFormat(PanelsSchema, 'paineis_conferencia'),
+    });
     
     if (!rawText) {
       throw new Error('No content generated from OpenRouter');
     }
 
-    // Parse the topics
-    const topics = parseTopics(rawText);
+    const json = JSON.parse(rawText);
+    const panels = json.paineis.map((p: any, idx: number) => ({
+      id: crypto.randomUUID(),
+      panelNumber: idx + 1,
+      suggestedTopic: p.titulo,
+      justification: p.justificativa,
+      isConfirmed: false,
+      isRegenerating: false,
+    }));
 
     // Respond with parsed topics
-    res.status(200).json({ panels: topics });
+    res.status(200).json({ panels });
   } catch (error) {
     console.error('Error generating topics:', error);
     res.status(500).json({ 

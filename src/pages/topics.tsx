@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import EventPanelTopics from '@/components/PanelTopics';
 import { PanelTopic } from '@/lib/parse';
+import { supabase } from '@/lib/supabaseClient';
 
 const TopicsPage = () => {
   const router = useRouter();
@@ -9,17 +10,29 @@ const TopicsPage = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (router.query.panels) {
+    const fetchPanels = async () => {
       try {
-        const parsedPanels = JSON.parse(router.query.panels as string);
-        setPanels(parsedPanels);
+        const { data: panels } = await supabase.from('panels').select('*');
+        if (panels) {
+          setPanels(panels.map(p => ({ 
+            ...p, 
+            id: p.id,
+            panelNumber: p.panel_number,
+            suggestedTopic: p.suggested_topic,
+            justification: p.justification,
+            isConfirmed: false, 
+            isRegenerating: false 
+          })));
+        }
       } catch (error) {
-        console.error('Failed to parse panels:', error);
-        alert('Invalid panel data. Redirecting to home...');
+        console.error('Failed to fetch panels:', error);
+        alert('Failed to load panels. Redirecting to home...');
         router.push('/');
       }
-    }
-  }, [router.query.panels, router]);
+    };
+
+    fetchPanels();
+  }, [router]);
 
   const onTopicConfirm = (panelId: string) => {
     setPanels(prevPanels => 

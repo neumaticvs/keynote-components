@@ -1,7 +1,15 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { findSpeakers } from '@/lib/people';
+import { zodResponseFormat } from 'openai/helpers/zod';
+import { z } from 'zod';
 import { generateWithOpenRouter } from '@/lib/openrouter';
-import { parseSpeakers } from '@/lib/parse';
+import { supabase } from '@/lib/supabaseClient';
+
+const SpeakerSchema = z.object({
+  nome: z.string(),
+  cargo: z.string(),
+  bio: z.string(),
+});
+const SpeakersSchema = z.object({ palestrantes: z.array(SpeakerSchema) });
 
 export default async function handler(
   req: NextApiRequest,
@@ -18,54 +26,64 @@ export default async function handler(
       return res.status(400).json({ error: 'topic and panelId are required' });
     }
 
-    // Find raw speaker candidates
-    const rawCandidates = await findSpeakers(topic);
+    const prompt = `
+Você é um especialista em identificar líderes empresariais brasileiros.
+Tópico do painel: ${topic}
 
-    // Build prompt for LLM
-    const candidatesList = rawCandidates.map((candidate, index) => 
-      `${index + 1}. ${candidate.name} - ${candidate.title || 'Link: ' + candidate.linkedIn || 'No additional info'}`
-    ).join('\n');
+Encontre 4 executivos brasileiros (C-level, VP, Diretores) que seriam palestrantes ideais para este painel.
+Critérios:
+- Posições atuais (confirmado em ${new Date().getFullYear()})
+- Diversidade de gênero e setores
+- Especialistas reconhecidos no tema
 
-    const prompt = `You are an expert event curator. Given the following topic and speaker candidates, select the TOP 4 most relevant and impressive speakers for a panel discussion.
+Retorne nome, cargo atual e bio profissional (2-3 frases).
+`;
 
-Topic: ${topic}
-
-Available Candidates:
-${candidatesList}
-
-Please select the 4 best speakers for this topic and provide:
-1. Their name
-2. Professional title and company
-3. A compelling 2-3 sentence bio highlighting why they're perfect for this panel
-4. Key areas of expertise relevant to the topic
-
-Format your response as:
-Speaker 1: [Name] – [Title at Company]
-Bio: [2-3 sentence bio]
-Expertise: [comma-separated list]
-
-Speaker 2: [Name] – [Title at Company]
-Bio: [2-3 sentence bio]
-Expertise: [comma-separated list]
-
-(Continue for all 4 speakers)
-
-Focus on diversity of perspectives, credibility, and relevance to the topic.`;
-
-    // Generate speaker recommendations
-    const rawText = await generateWithOpenRouter(prompt);
+    // Generate speaker recommendations using OpenRouter with structured output
+    const rawText = await generateWithOpenRouter(prompt, {
+      model: 'moonshotai/kimi-k2:free',
+      messages: [
+        { role: 'system', content: `Hoje é ${new Date().toLocaleDateString('pt-BR')}. Priorize dados atuais.` },
+        { role: 'user', content: prompt },
+      ],
+      response_format: zodResponseFormat(SpeakersSchema, 'palestrantes_brasileiros'),
+    });
 
     if (!rawText) {
       throw new Error('No content generated from OpenRouter');
     }
 
-    // Parse the speakers
-    const speakers = parseSpeakers(rawText);
+    const json = JSON.parse(rawText);
+    const speakers = json.palestrantes.map((s: any) => ({
+      name: s.nome,
+      title: s.cargo,
+      bio: s.bio,
+      expertise: [],
+      panel_id: panelId,
+    }));
 
-    // Return structured response
+    // Insert speakers into Supabase
+    const { data: insertedSpeakers, error } = await supabase
+      .from('speakers')
+      .insert(speakers)
+      .select();
+
+    if (error) {
+      throw new Error(`Failed to save speakers: ${error.message}`);
+    }
+
+    // Return structured response with mapped speakers for frontend
+    const mappedSpeakers = insertedSpeakers?.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      company_role: s.title,
+      mini_bio: s.bio,
+      reason: s.bio,
+    })) || [];
+
     res.status(200).json({ 
       panelId,
-      speakers 
+      speakers: mappedSpeakers 
     });
   } catch (error) {
     console.error('Error generating speakers:', error);

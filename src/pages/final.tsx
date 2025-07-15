@@ -15,25 +15,35 @@ const FinalPage = () => {
   const [mainTopic, setMainTopic] = useState<string>('');
 
   useEffect(() => {
-    if (router.query.panels) {
+    const fetchFinalAgenda = async () => {
       try {
-        const parsedPanels = JSON.parse(router.query.panels as string);
-        setPanels(parsedPanels);
+        const response = await fetch('/api/final');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setPanels(data.panels);
+        
+        // For now, use query params for event metadata if available
+        // In the future, these could also be stored in the database
+        if (router.query.eventName) {
+          setEventName(router.query.eventName as string);
+        }
+        
+        if (router.query.mainTopic) {
+          setMainTopic(router.query.mainTopic as string);
+        }
       } catch (error) {
-        console.error('Failed to parse panels:', error);
-        alert('Invalid panel data. Redirecting to home...');
+        console.error('Failed to fetch final agenda:', error);
+        alert('Failed to load agenda. Redirecting to home...');
         router.push('/');
       }
-    }
+    };
 
-    if (router.query.eventName) {
-      setEventName(router.query.eventName as string);
-    }
-
-    if (router.query.mainTopic) {
-      setMainTopic(router.query.mainTopic as string);
-    }
-  }, [router.query]);
+    fetchFinalAgenda();
+  }, [router]);
 
   const downloadCSV = () => {
     // Create CSV headers

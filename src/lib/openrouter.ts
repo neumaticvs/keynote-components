@@ -1,5 +1,7 @@
 // OpenRouter API wrapper
 
+const MODEL = process.env.NEXT_PUBLIC_OPENROUTER_MODEL || 'moonshotai/kimi-k2:free'
+
 interface OpenRouterResponse {
   choices: Array<{
     message: {
@@ -8,11 +10,31 @@ interface OpenRouterResponse {
   }>;
 }
 
-export async function generateWithOpenRouter(prompt: string, model?: string): Promise<string> {
+interface OpenRouterOptions {
+  model?: string;
+  messages?: Array<{
+    role: string;
+    content: string;
+  }>;
+  response_format?: any;
+}
+
+export async function generateWithOpenRouter(prompt: string, options?: OpenRouterOptions): Promise<string> {
   const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
   
   if (!OPENROUTER_KEY) {
     throw new Error('OPENROUTER_KEY is not configured');
+  }
+
+  // Build the request body
+  const requestBody: any = {
+    model: options?.model || MODEL,
+    messages: options?.messages || [{ role: 'user', content: prompt }],
+  };
+
+  // Add response_format if provided (for structured output)
+  if (options?.response_format) {
+    requestBody.response_format = options.response_format;
   }
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -21,10 +43,7 @@ export async function generateWithOpenRouter(prompt: string, model?: string): Pr
       'Authorization': `Bearer ${OPENROUTER_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: model || 'anthropic/claude-3-opus',
-      messages: [{ role: 'user', content: prompt }],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {

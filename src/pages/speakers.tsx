@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import SuggestSpeakers from '@/components/SuggestSpeakers';
 import { PanelTopic } from '@/lib/parse';
 import { Speaker } from '@/lib/people';
+import { supabase } from '@/lib/supabaseClient';
 
 interface PanelWithSpeakers extends PanelTopic {
   speakers?: Array<Speaker & { id: string; isConfirmed?: boolean }>;
@@ -79,21 +80,24 @@ const SpeakersPage = () => {
     }
   };
 
-  const onConfirm = (panelId: string, speakerId: string) => {
-    setPanels(prevPanels =>
-      prevPanels.map(panel =>
-        panel.id === panelId
-          ? {
-              ...panel,
-              speakers: panel.speakers?.map(speaker =>
-                speaker.id === speakerId
-                  ? { ...speaker, isConfirmed: true }
-                  : speaker
-              ),
-            }
-          : panel
-      )
-    );
+  const onConfirm = async (_panelId: string, speakerId: string) => {
+    try {
+      // Update speaker confirmation in Supabase
+      const { error } = await supabase
+        .from('speakers')
+        .update({ confirmed: true })
+        .eq('id', speakerId);
+
+      if (error) {
+        throw new Error(`Failed to confirm speaker: ${error.message}`);
+      }
+
+      // Refresh state from DB
+      await refreshSpeakersFromDB();
+    } catch (error) {
+      console.error('Error confirming speaker:', error);
+      alert(error instanceof Error ? error.message : 'Failed to confirm speaker. Please try again.');
+    }
   };
 
   const onRegenerate = async (panelId: string, speakerId: string) => {
@@ -137,17 +141,58 @@ const SpeakersPage = () => {
     }
   };
 
-  const onRemove = (panelId: string, speakerId: string) => {
-    setPanels(prevPanels =>
-      prevPanels.map(panel =>
-        panel.id === panelId
-          ? {
-              ...panel,
-              speakers: panel.speakers?.filter(speaker => speaker.id !== speakerId),
-            }
-          : panel
-      )
-    );
+  const onRemove = async (_panelId: string, speakerId: string) => {
+    try {
+      // Delete speaker from Supabase
+      const { error } = await supabase
+        .from('speakers')
+        .delete()
+        .eq('id', speakerId);
+
+      if (error) {
+        throw new Error(`Failed to remove speaker: ${error.message}`);
+      }
+
+      // Refresh state from DB
+      await refreshSpeakersFromDB();
+    } catch (error) {
+      console.error('Error removing speaker:', error);
+      alert(error instanceof Error ? error.message : 'Failed to remove speaker. Please try again.');
+    }
+  };
+
+  const refreshSpeakersFromDB = async () => {
+    try {
+      const { data: speakers, error } = await supabase
+        .from('speakers')
+        .select('*');
+
+      if (error) {
+        throw new Error(`Failed to fetch speakers: ${error.message}`);
+      }
+
+      // Update panels with refreshed speaker data
+      setPanels(prevPanels =>
+        prevPanels.map(panel => ({
+          ...panel,
+          speakers: speakers
+            ?.filter(speaker => speaker.panel_id === panel.id)
+            .map(speaker => ({
+              id: speaker.id,
+              name: speaker.name,
+              title: speaker.title,
+              expertise: speaker.expertise || [],
+              bio: speaker.bio,
+              imageUrl: speaker.image_url,
+              linkedIn: speaker.linked_in,
+              twitter: speaker.twitter,
+              isConfirmed: speaker.confirmed,
+            })) || [],
+        }))
+      );
+    } catch (error) {
+      console.error('Error refreshing speakers:', error);
+    }
   };
 
   const handleProceed = () => {
