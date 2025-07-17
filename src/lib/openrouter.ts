@@ -18,11 +18,11 @@ interface OpenRouterOptions {
 }
 
 export async function generateWithOpenRouter(prompt: string, options?: OpenRouterOptions): Promise<string> {
-  const OPENROUTER_KEY = process.env.OPENROUTER_KEY;
+  const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
   const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2:free';
   
-  if (!OPENROUTER_KEY) {
-    throw new Error('OPENROUTER_KEY is not configured');
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY is not configured');
   }
 
   // Build the request body
@@ -39,7 +39,7 @@ export async function generateWithOpenRouter(prompt: string, options?: OpenRoute
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENROUTER_KEY}`,
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(requestBody),

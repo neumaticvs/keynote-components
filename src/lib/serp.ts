@@ -6,14 +6,14 @@ interface SearchResult {
 }
 
 export async function searchGoogle(query: string): Promise<SearchResult[]> {
-  const SERPAPI_KEY = process.env.SERPAPI_KEY;
+  const SERPER_API_KEY = process.env.SERPER_API_KEY;
   
-  if (!SERPAPI_KEY) {
-    throw new Error('SERPAPI_KEY is not configured');
+  if (!SERPER_API_KEY) {
+    throw new Error('SERPER_API_KEY is not configured');
   }
 
   const params = new URLSearchParams({
-    api_key: SERPAPI_KEY,
+    api_key: SERPER_API_KEY,
     q: query,
     engine: 'google',
   });
